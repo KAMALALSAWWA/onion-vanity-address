@@ -2,7 +2,7 @@
 
 This tool generates Tor Onion Service v3 [vanity address](https://community.torproject.org/onion-services/advanced/vanity-addresses/) with a specified prefix.
 
-Compared to [similar tools](#similar-tools), it uses the fastest search algorithm 🚀
+Compared to [similar tools](#similar-tools), it uses the [fastest search algorithm](#the-fastest-search-algorithm) 🚀
 
 ## Usage
 
@@ -64,3 +64,25 @@ Each additional character increases search time by a factor of 32.
 
 * [mkp224o](https://github.com/cathugger/mkp224o)
 * [oniongen-go](https://github.com/rdkr/oniongen-go)
+
+## The fastest search algorithm
+
+Tor Onion Service [address](https://github.com/torproject/torspec/blob/main/rend-spec-v3.txt) is derived from ed25519 public key.
+The tool generates candidate public keys until it finds one that has a specifided prefix when encoded as onion address.
+
+ed25519 keypair consists of:
+* 32-byte secret key (scalar) - a random value that serves as the secret
+* 32-byte public key (point) - derived by scalar multiplication of the base point by the scalar
+
+ed25519 public key is 32-byte y-coordinate of a point on a [Twisted Edwards curve](https://datatracker.ietf.org/doc/html/rfc8032) equivalent to [Curve25519](https://datatracker.ietf.org/doc/html/rfc7748#section-4.1).
+
+Both `mkp224o` and `onion-vanity-address` leverage additive properties of elliptic curves to avoid full scalar multiplication for each candidate key.
+Addition of points requires expesive field inversion operation and both tools utilize batch field inversion (Montgomery trick)
+to perform single field inversion per batch of candidate points.
+
+The key performance difference is that while `mkp224o` uses point arithmetic that calculates both coordinates for each candidate point,
+`onion-vanity-address` uses curve coordinate symmetry and calculates only y-coordinates to reduce number of field operations.
+
+The algorithm has amortized cost **5M + 2A** per candidate key, where M is field multiplication and A is field addition.
+
+See also [vanity25519](https://github.com/AlexanderYastrebov/vanity25519) that implements an efficient Curve25519 vanity key generator.
