@@ -85,4 +85,7 @@ The key performance difference is that while `mkp224o` uses point arithmetic tha
 
 The algorithm has amortized cost **5M + 2A** per candidate key, where M is field multiplication and A is field addition.
 
-See also [vanity25519](https://github.com/AlexanderYastrebov/vanity25519) that implements an efficient Curve25519 vanity key generator.
+See also:
+* [vanity25519](https://github.com/AlexanderYastrebov/vanity25519) — Efficient Curve25519 vanity key generator.
+* [wireguard-vanity-key](https://github.com/AlexanderYastrebov/wireguard-vanity-key) — Fast WireGuard vanity key generator.
+* [age-vanity-keygen](https://github.com/AlexanderYastrebov/age-vanity-keygen) — Fast vanity age X25519 identity generator.
