@@ -68,7 +68,7 @@ Each additional character increases search time by a factor of 32.
 ## The fastest search algorithm
 
 Tor Onion Service [address](https://github.com/torproject/torspec/blob/main/rend-spec-v3.txt) is derived from ed25519 public key.
-The tool generates candidate public keys until it finds one that has a specifided prefix when encoded as onion address.
+The tool generates candidate public keys until it finds one that has a specified prefix when encoded as onion address.
 
 ed25519 keypair consists of:
 * 32-byte secret key (scalar) - a random value that serves as the secret
@@ -77,7 +77,7 @@ ed25519 keypair consists of:
 ed25519 public key is 32-byte y-coordinate of a point on a [Twisted Edwards curve](https://datatracker.ietf.org/doc/html/rfc8032) equivalent to [Curve25519](https://datatracker.ietf.org/doc/html/rfc7748#section-4.1).
 
 Both `mkp224o` and `onion-vanity-address` leverage additive properties of elliptic curves to avoid full scalar multiplication for each candidate key.
-Addition of points requires expesive field inversion operation and both tools utilize batch field inversion (Montgomery trick)
+Addition of points requires expensive field inversion operation and both tools utilize batch field inversion (Montgomery trick)
 to perform single field inversion per batch of candidate points.
 
 The key performance difference is that while `mkp224o` uses point arithmetic that calculates both coordinates for each candidate point,
