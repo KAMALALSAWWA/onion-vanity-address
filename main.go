@@ -30,7 +30,7 @@ Options:
 onion-vanity-address generates a new hidden service ed25519 key pair with an onion address having the specified PREFIX,
 and outputs it to standard output in base64-encoded YAML format.
 
-PREFIX is transformed to lowercase and cannot contain the characters '1', '8', or '9'.
+PREFIX is transformed to lowercase and cannot contain the characters '0', '1', '8', and '9'.
 
 In --from mode, onion-vanity-address starts the search from a specified public key and
 outputs the offset to the public key with the desired prefix.

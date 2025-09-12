@@ -7,9 +7,10 @@ Compared to [similar tools](#similar-tools), it uses the [fastest search algorit
 ## Usage
 
 Install the tool locally and run:
-```console
-$ go install github.com/AlexanderYastrebov/onion-vanity-address@latest
-
+```sh
+go install github.com/AlexanderYastrebov/onion-vanity-address@latest
+```
+```
 $ onion-vanity-address allium
 Found allium... in 12s after 558986486 attempts (48529996 attempts/s)
 ---
@@ -19,9 +20,9 @@ hs_ed25519_secret_key: PT0gZWQyNTUxOXYxLXNlY3JldDogdHlwZTAgPT0AAAAQEW4Rhot7oroPa
 ```
 
 or use the Docker image:
-```console
-$ docker pull ghcr.io/alexanderyastrebov/onion-vanity-address:latest
-$ docker run  ghcr.io/alexanderyastrebov/onion-vanity-address:latest allium
+```sh
+docker pull ghcr.io/alexanderyastrebov/onion-vanity-address:latest
+docker run  ghcr.io/alexanderyastrebov/onion-vanity-address:latest allium
 ```
 
 To configure hidden service keypair decode base64-encoded secret key into `hs_ed25519_secret_key` file,
@@ -35,6 +36,11 @@ $ systemctl restart tor
 
 $ cat /var/lib/tor/hidden_service/hostname
 alliumdye3it7ko4cuftoni4rlrupuobvio24ypz55qpzjzpvuetzhyd.onion
+```
+
+To see all flags and usage examples run:
+```sh
+onion-vanity-address --help
 ```
 
 ## Performance
