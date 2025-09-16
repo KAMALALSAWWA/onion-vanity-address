@@ -190,7 +190,7 @@ func searchParallel(ctx context.Context, startPublicKey []byte, test func([]byte
 
 	var attemptsTotal atomic.Uint64
 	var wg sync.WaitGroup
-	for range runtime.NumCPU() {
+	for range runtime.GOMAXPROCS(0) {
 		wg.Go(func() {
 			startOffset, _ := rand.Int(rand.Reader, new(big.Int).SetUint64(1<<64-1))
 			attempts := search(ctx, startPublicKey, startOffset, 4096, test, func(pk []byte, offset *big.Int) {
