@@ -43,11 +43,11 @@ func search(ctx context.Context, startPublicKey []byte, startOffset *big.Int, ba
 	po := new(edwards25519.Point).ScalarMult(scalarFromBigInt(startOffset), _B8)
 	p.Add(p, po)
 
-	ynom := make([]field.Element, batchSize+1)
+	ynum := make([]field.Element, batchSize+1)
 	yden := make([]field.Element, batchSize+1)
-	y := make([]field.Element, batchSize+1)
+	y := make([]field.Element, batchSize+1) // y = ynum / yden
 
-	// offsets[i] = (i+1) * pointOffset
+	// offsets[i] = (i+1) * _B8
 	offsets := make([]affine, batchSize/2)
 	poi := new(edwards25519.Point).Set(_B8)
 	for i := range batchSize/2 - 1 {
@@ -56,7 +56,7 @@ func search(ctx context.Context, startPublicKey []byte, startOffset *big.Int, ba
 	}
 	offsets[batchSize/2-1].fromP3(poi)
 
-	// batchOffset = (batchSize+1) * pointOffset
+	// batchOffset = (batchSize+1) * _B8
 	batchOffset := new(edwards25519.Point).Set(_B8)
 	batchOffset.Add(batchOffset, poi)
 	batchOffset.Add(batchOffset, poi)
@@ -68,10 +68,11 @@ func search(ctx context.Context, startPublicKey []byte, startOffset *big.Int, ba
 	pa := new(affine).fromP3(p)
 
 	var x1y2, y1x2 field.Element
-	var bm [32]byte
+	var yb [32]byte
 
 	// One iteration tests batchSize y-coordinates of the
-	// batch = {p + pointOffset, ... , p + batchSize/2*pointOffset, p - pointOffset, ... , p - batchSize/2*pointOffset}
+	// batch = {p + _B8, ... , p + batchSize/2*_B8, p − _B8, ... , p − batchSize/2*_B8}
+	// as well as the center point p.
 	//
 	// Complexity: (5M + 2A)*batchSize + 278M + 9A
 	for i := uint64(batchSize / 2); ; i += uint64(batchSize + 1) {
@@ -99,12 +100,12 @@ func search(ctx context.Context, startPublicKey []byte, startOffset *big.Int, ba
 
 			// p3 = p1 + p2
 			// y3 = (x1*y1 − x2*y2) / (x1*y2 − y1*x2) = num / den
-			ynom[j].Subtract(&p1.XY, &p2.XY)
+			ynum[j].Subtract(&p1.XY, &p2.XY)
 			yden[j].Subtract(&x1y2, &y1x2)
 
 			// p3' = p1 − p2
 			// y3' = (x1*y1 + x2*y2) / (x1*y2 + y1*x2) = num / den
-			ynom[batchSize/2+j].Add(&p1.XY, &p2.XY)
+			ynum[batchSize/2+j].Add(&p1.XY, &p2.XY)
 			yden[batchSize/2+j].Add(&x1y2, &y1x2)
 		}
 
@@ -112,32 +113,33 @@ func search(ctx context.Context, startPublicKey []byte, startOffset *big.Int, ba
 		p.Add(p, batchOffset)
 
 		// Piggyback on vector division to calculate 1/p.Z
-		_, _, ez, _ := p.ExtendedCoordinates()
-
-		ynom[batchSize].One()
-		yden[batchSize].SetBytes(ez.Bytes())
+		_, _, pZ, _ := p.ExtendedCoordinates()
+		ynum[batchSize].One()
+		yden[batchSize].SetBytes(pZ.Bytes())
 		pZinv := &y[batchSize]
 
 		// Complexity: 262M + 4M*(batchSize+1) = 4M*batchSize + 266M
-		vectorDivision(ynom, yden, y)
+		vectorDivision(ynum, yden, y)
 
+		// Check each candidate in the batch
 		for j := range batchSize {
-			copy(bm[:], y[j].Bytes()) // eliminate field.Element.Bytes() allocations
-			if accept(bm[:]) {
+			copy(yb[:], y[j].Bytes()) // eliminate field.Element.Bytes() allocations
+			if accept(yb[:]) {
 				offset := new(big.Int).Add(startOffset, new(big.Int).SetUint64(i))
 				if j < batchSize/2 {
 					offset.Add(offset, big.NewInt(int64(j+1)))
 				} else {
 					offset.Sub(offset, big.NewInt(int64(j+1-batchSize/2)))
 				}
-				yield(slices.Clone(bm[:]), offset)
+				yield(slices.Clone(yb[:]), offset)
 			}
 		}
 
-		copy(bm[:], pa.Y.Bytes()) // eliminate field.Element.Bytes() allocations
-		if accept(bm[:]) {
+		// Check center point of the batch
+		copy(yb[:], pa.Y.Bytes()) // eliminate field.Element.Bytes() allocations
+		if accept(yb[:]) {
 			offset := new(big.Int).Add(startOffset, new(big.Int).SetUint64(i))
-			yield(slices.Clone(bm[:]), offset)
+			yield(slices.Clone(yb[:]), offset)
 		}
 
 		// Complexity: 3M
