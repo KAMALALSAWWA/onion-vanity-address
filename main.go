@@ -19,7 +19,7 @@ import (
 )
 
 const usage = `Usage:
-    onion-vanity-address [--from PUBLIC_KEY] [--timeout TIMEOUT] PREFIX
+    onion-vanity-address [--from PUBLIC_KEY] [--timeout TIMEOUT] PREFIX [PREFIX]...
     onion-vanity-address --offset OFFSET
 
 Options:
@@ -27,10 +27,10 @@ Options:
     --offset OFFSET         Add an offset to a base64-encoded hs_ed25519_secret_key from standard input.
     --timeout TIMEOUT       Stop after the specified timeout (e.g., 10s, 5m, 1h).
 
-onion-vanity-address generates a new hidden service ed25519 key pair with an onion address having the specified PREFIX,
+onion-vanity-address generates a new hidden service ed25519 key pair with an onion address having one of the specified PREFIXes,
 and outputs it to standard output in base64-encoded YAML format.
 
-PREFIX is transformed to lowercase and cannot contain the characters '0', '1', '8', and '9'.
+PREFIX must use base32 character set "` + onionBase32EncodingCharset + `".
 
 In --from mode, onion-vanity-address starts the search from a specified public key and
 outputs the offset to the public key with the desired prefix.
@@ -108,13 +108,13 @@ func main() {
 		return
 	}
 
-	if flag.NArg() != 1 {
+	if flag.NArg() == 0 {
 		fmt.Fprintln(os.Stderr, "Error: PREFIX required")
 		flag.Usage()
 		os.Exit(1)
 	}
 
-	prefix := flag.Arg(0)
+	prefixes := flag.Args()
 
 	var startSecretKey, startPublicKey []byte
 	if fromFlag != "" {
@@ -136,7 +136,7 @@ func main() {
 	}
 
 	start := time.Now()
-	found, vanityPublicKey, attempts := searchParallel(ctx, startPublicKey, must(match(prefix)))
+	found, vanityPublicKey, attempts := searchParallel(ctx, startPublicKey, must(matchAnyOf(prefixes)))
 	elapsed := time.Since(start)
 
 	if found != nil {
@@ -146,11 +146,14 @@ func main() {
 			vanityPublicKey = must(publicKeyFor(vanitySecretKey))
 		}
 
+		address := encodeOnionAddress(vanityPublicKey)
+		prefix := longestMatching(prefixes, address)
+
 		fmt.Fprintf(os.Stderr, "Found %s... in %s after %d attempts (%.0f attempts/s)\n",
 			prefix, elapsed.Round(time.Second), attempts, float64(attempts)/elapsed.Seconds())
 
 		fmt.Println("---")
-		fmt.Printf("%s: %s\n", hostnameFileName, encodeOnionAddress(vanityPublicKey))
+		fmt.Printf("%s: %s\n", hostnameFileName, address)
 		if len(vanitySecretKey) > 0 {
 			fmt.Printf("%s: %s\n", publicKeyFileName, base64.StdEncoding.EncodeToString(encodePublicKey(vanityPublicKey)))
 			fmt.Printf("%s: %s\n", secretKeyFileName, base64.StdEncoding.EncodeToString(encodeSecretKey(vanitySecretKey)))
@@ -158,10 +161,51 @@ func main() {
 			fmt.Printf("offset: %s\n", base64.StdEncoding.EncodeToString(found.Bytes()))
 		}
 	} else {
-		fmt.Fprintf(os.Stderr, "Stopped searching %s... after %s and %d attempts (%.0f attempts/s)\n",
-			prefix, elapsed.Round(time.Second), attempts, float64(attempts)/elapsed.Seconds())
+		fmt.Fprintf(os.Stderr, "Stopped searching %v... after %s and %d attempts (%.0f attempts/s)\n",
+			prefixes, elapsed.Round(time.Second), attempts, float64(attempts)/elapsed.Seconds())
 		os.Exit(2)
 	}
+}
+
+func longestMatching(prefixes []string, address string) string {
+	longest := ""
+	for _, p := range prefixes {
+		if strings.HasPrefix(address, p) && len(p) > len(longest) {
+			longest = p
+		}
+	}
+	if longest == "" {
+		panic("no matching prefix")
+	}
+	return longest
+}
+
+func matchAnyOf(prefixes []string) (func([]byte) bool, error) {
+	if len(prefixes) == 0 {
+		return nil, fmt.Errorf("at least one prefix required")
+	}
+
+	if len(prefixes) == 1 {
+		return match(prefixes[0])
+	}
+
+	tests := make([]func([]byte) bool, len(prefixes))
+	for i, p := range prefixes {
+		var err error
+		tests[i], err = match(p)
+		if err != nil {
+			return nil, err
+		}
+	}
+
+	return func(p []byte) bool {
+		for _, test := range tests {
+			if test(p) {
+				return true
+			}
+		}
+		return false
+	}, nil
 }
 
 func match(prefix string) (func([]byte) bool, error) {
@@ -169,7 +213,6 @@ func match(prefix string) (func([]byte) bool, error) {
 		return nil, fmt.Errorf("empty prefix")
 	}
 
-	prefix = strings.ToLower(prefix)
 	if strings.TrimLeft(prefix, onionBase32EncodingCharset) != "" {
 		return nil, fmt.Errorf("prefix must use characters %q", onionBase32EncodingCharset)
 	}

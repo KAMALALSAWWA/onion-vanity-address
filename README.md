@@ -38,6 +38,14 @@ $ cat /var/lib/tor/hidden_service/hostname
 alliumdye3it7ko4cuftoni4rlrupuobvio24ypz55qpzjzpvuetzhyd.onion
 ```
 
+The tool can check multiple prefixes simultaneously:
+```console
+onion-vanity-address zwiebel cipolla cebolla
+```
+
+It will output the first onion address that starts with any of the specified prefixes.
+When searching for multiple prefixes of varying lengths, shorter prefixes will appear more often across multiple runs.
+
 To see all flags and usage examples run:
 ```sh
 onion-vanity-address --help
