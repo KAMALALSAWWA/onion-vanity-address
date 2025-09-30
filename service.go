@@ -5,8 +5,9 @@ import (
 	"crypto/sha3"
 	"crypto/sha512"
 	"encoding/base32"
+	"encoding/base64"
 	"fmt"
-	"strings"
+	"io"
 )
 
 const (
@@ -45,16 +46,69 @@ func encodeOnionAddress(publicKey []byte) string {
 	return onionBase32Encoding.EncodeToString(buf.Bytes()) + ".onion"
 }
 
-// encodePublicKey returns the content of hs_ed25519_public_key file.
-func encodePublicKey(publicKey []byte) []byte {
+func readServiceSecretKey(r io.Reader) ([]byte, error) {
+	limit := int64(base64.StdEncoding.EncodedLen(secretKeyFileLength))
+	encoded, err := io.ReadAll(io.LimitReader(r, limit))
+	if err != nil {
+		return nil, err
+	}
+	decoded := make([]byte, secretKeyFileLength)
+	if _, err := base64.StdEncoding.Decode(decoded, encoded); err != nil {
+		return nil, err
+	}
+	return parseServiceSecretKey(decoded)
+}
+
+// parseServiceSecretKey parses the content of hs_ed25519_secret_key file and returns the edwards25519 private key.
+func parseServiceSecretKey(b []byte) ([]byte, error) {
+	b, ok := bytes.CutPrefix(b, []byte(secretKeyFilePrefix))
+	if !ok {
+		return nil, fmt.Errorf("invalid secret key prefix")
+	}
+	if len(b) != 64 {
+		return nil, fmt.Errorf("invalid secret key length, must be 64 bytes")
+	}
+	return b[:32], nil
+}
+
+func decodeServicePublicKey(from string) ([]byte, error) {
+	decoded, err := base64.StdEncoding.DecodeString(from)
+	if err != nil {
+		return nil, err
+	}
+	return parseServicePublicKey(decoded)
+}
+
+// parseServicePublicKey parses the content of hs_ed25519_public_key file and returns the edwards25519 public key.
+func parseServicePublicKey(b []byte) ([]byte, error) {
+	b, ok := bytes.CutPrefix(b, []byte(publicKeyFilePrefix))
+	if !ok {
+		return nil, fmt.Errorf("invalid public key prefix")
+	}
+	if len(b) != 32 {
+		return nil, fmt.Errorf("invalid public key length, must be 32 bytes")
+	}
+	return b, nil
+}
+
+func encodeServicePublicKey(publicKey []byte) string {
+	return base64.StdEncoding.EncodeToString(serializeServicePublicKey(publicKey))
+}
+
+// serializeServicePublicKey returns the content of hs_ed25519_public_key file.
+func serializeServicePublicKey(publicKey []byte) []byte {
 	buf := make([]byte, 0, 64)
 	buf = append(buf, publicKeyFilePrefix...)
 	buf = append(buf, publicKey...)
 	return buf
 }
 
-// encodeSecretKey returns the content of hs_ed25519_secret_key file.
-func encodeSecretKey(secretKey []byte) []byte {
+func encodeServiceSecretKey(publicKey []byte) string {
+	return base64.StdEncoding.EncodeToString(serializeServiceSecretKey(publicKey))
+}
+
+// serializeServiceSecretKey returns the content of hs_ed25519_secret_key file.
+func serializeServiceSecretKey(secretKey []byte) []byte {
 	buf := make([]byte, 0, 96)
 	buf = append(buf, secretKeyFilePrefix...)
 
@@ -76,66 +130,4 @@ func encodeSecretKey(secretKey []byte) []byte {
 	hs[31] |= 64
 	buf = append(buf, hs[:]...)
 	return buf
-}
-
-func decodePublicKey(b []byte) ([]byte, error) {
-	b, ok := bytes.CutPrefix(b, []byte(publicKeyFilePrefix))
-	if !ok {
-		return nil, fmt.Errorf("invalid public key prefix")
-	}
-	if len(b) != 32 {
-		return nil, fmt.Errorf("invalid public key length, must be 32 bytes")
-	}
-	return b, nil
-}
-
-func decodeSecretKey(b []byte) ([]byte, error) {
-	b, ok := bytes.CutPrefix(b, []byte(secretKeyFilePrefix))
-	if !ok {
-		return nil, fmt.Errorf("invalid secret key prefix")
-	}
-	if len(b) != 64 {
-		return nil, fmt.Errorf("invalid secret key length, must be 64 bytes")
-	}
-	return b[:32], nil
-}
-
-// decodePrefixBits returns base32-decoded prefix and number of decoded bits.
-func decodePrefixBits(prefix string) ([]byte, int, error) {
-	decodedBits := 5 * len(prefix)
-	quantums := (len(prefix) + 7) / 8
-	prefix += strings.Repeat("a", quantums*8-len(prefix))
-	buf := make([]byte, quantums*5)
-	_, err := onionBase32Encoding.Decode(buf, []byte(prefix))
-	if err != nil {
-		return nil, 0, err
-	}
-	return buf, decodedBits, err
-}
-
-// hasPrefixBits returns a function that checks if the input has the specified prefix bits.
-func hasPrefixBits(prefix []byte, bits int) func(input []byte) bool {
-	if len(prefix) == 0 || len(prefix) > 32 {
-		panic("invalid prefix ")
-	}
-	if bits <= 0 || bits > 256 || bits > len(prefix)*8 {
-		panic("invalid bits")
-	}
-
-	if bits%8 == 0 {
-		return func(b []byte) bool {
-			return bytes.HasPrefix(b, prefix)
-		}
-	}
-
-	prefixBytes := bits / 8
-	shift := 8 - (bits % 8)
-	tailByte := prefix[prefixBytes] >> shift
-	prefix = prefix[:prefixBytes]
-
-	return func(b []byte) bool {
-		return len(b) > prefixBytes && // must be long enough to check tail byte
-			bytes.Equal(b[:prefixBytes], prefix) &&
-			b[prefixBytes]>>shift == tailByte
-	}
 }

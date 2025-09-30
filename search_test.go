@@ -31,9 +31,8 @@ func TestSearch(t *testing.T) {
 		ctx, cancel := context.WithCancel(context.Background())
 		defer cancel()
 
-		prefixBytes, bits, err := decodePrefixBits("ayay")
+		accept, err := hasPrefix("ayay", onionBase32Encoding)
 		require.NoError(t, err)
-		accept := hasPrefixBits(prefixBytes, bits)
 
 		var found *big.Int
 		yield := func(publicKey []byte, offset *big.Int) {
@@ -101,14 +100,10 @@ func TestSearch(t *testing.T) {
 
 func BenchmarkSearchParallel(b *testing.B) {
 	startPublicKey, err := onionBase32Encoding.DecodeString("onionjifniegtjbbifet65goa2siqubne6n2qfhiksryfvsbdhda")
-	if err != nil {
-		b.Fatal(err)
-	}
-	decodedBytes, bits, err := decodePrefixBits("goodluckwiththisprefix")
-	if err != nil {
-		b.Fatal(err)
-	}
-	testPrefix := hasPrefixBits(decodedBytes, bits)
+	require.NoError(b, err)
+
+	testPrefix, err := hasPrefix("goodluckwiththisprefix", onionBase32Encoding)
+	require.NoError(b, err)
 
 	for _, batchSize := range []int{1024, 2048, 4096, 8192} {
 		b.Run(fmt.Sprintf("%d", batchSize), func(b *testing.B) {

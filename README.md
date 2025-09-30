@@ -2,6 +2,8 @@
 
 This tool generates Tor Onion Service v3 [vanity address](https://community.torproject.org/onion-services/advanced/vanity-addresses/) with a specified prefix.
 
+It can also generate vanity [client authorization](https://community.torproject.org/onion-services/advanced/client-auth/) keypair.
+
 Compared to [similar tools](#similar-tools), it uses the [fastest search algorithm](#the-fastest-search-algorithm) 🚀
 
 ## Usage
@@ -32,19 +34,58 @@ $ echo PT0gZWQyNTUxOXYxLXNlY3JldDogdHlwZTAgPT0AAAAQEW4Rhot7oroPaETlAEG3GPAntvJ1a
 
 $ rm /var/lib/tor/hidden_service/hs_ed25519_public_key
 $ rm /var/lib/tor/hidden_service/hostname
-$ systemctl restart tor
+$ systemctl reload tor
 
 $ cat /var/lib/tor/hidden_service/hostname
 alliumdye3it7ko4cuftoni4rlrupuobvio24ypz55qpzjzpvuetzhyd.onion
 ```
 
+### Multiple prefixes
+
 The tool can check multiple prefixes simultaneously:
-```console
+```sh
 onion-vanity-address zwiebel cipolla cebolla
 ```
 
 It will output the first onion address that starts with any of the specified prefixes.
 When searching for multiple prefixes of varying lengths, shorter prefixes will appear more often across multiple runs.
+
+### Client authorization
+
+To generate vanity [client authorization](https://community.torproject.org/onion-services/advanced/client-auth/) keypair use `--client` flag:
+```console
+$ onion-vanity-address --client LEMON
+Found LEMON... in 0s after 14990923 attempts (63626192 attempts/s)
+---
+public_key: LEMON7P5L7FEZZEJJGQTC3PDFRHEOOBP3H2XXHRFQSD72OKKEE5Q
+private_key: AAADDFICRR46KLA52KV2QRIN6GUWIPEIVZZZUVZLC5UVE53QNMTA
+```
+
+then add public key to `authorized_clients` directory:
+```console
+$ echo descriptor:x25519:LEMON7P5L7FEZZEJJGQTC3PDFRHEOOBP3H2XXHRFQSD72OKKEE5Q > /var/lib/tor/hidden_service/authorized_clients/lemon.auth
+$ systemctl reload tor
+```
+
+To access the service via Tor Browser provide it the private key:
+```
+┌────────────────────────────────┬───────────────────────────────────────────
+│ 🛈 Authentication required   🗙 │ ＋
+├────────────────────────────────┴───────────────────────────────────────────
+│ ← → ⟳ 🛈 🗝 alliumdye3it7ko4cuftoni4rlrupuobvio24ypz55qpzjzpvuetzhyd.onion
+├───────────────────────────────────────────────────────┬────────────────────
+│                                                       │
+│  The onion site allium...etzhyd.onion is requesting   │
+│  that you authenticate.                               │
+│                                                       │
+│  ╭─────────────────────────────────────────────────╮  │
+│  │ AAADDFICRR46KLA52KV2QRIN6GUWIPEIVZZZUVZLC5UVE...│  │
+│  ╰─────────────────────────────────────────────────╯  │
+│   □ Remember this key          ╭──────────╮ ╭──────╮  │
+│                                │  Cancel  │ │  OK  │  │
+│                                ╰──────────╯ ╰──────╯  │
+╰───────────────────────────────────────────────────────╯
+```
 
 To see all flags and usage examples run:
 ```sh
@@ -80,7 +121,7 @@ Run distributed vanity address search in Kubernetes cluster using the [demo-k8s.
 without exposing the secret key to the cluster:
 
 ```console
-$ # Locally generate secure starting key pair (or use existing one created by Tor)
+$ # Locally generate secure starting keypair (or use existing one created by Tor)
 $ onion-vanity-address start
 Found start... in 1s after 26921387 attempts (43429741 attempts/s)
 ---
@@ -132,7 +173,7 @@ Found lukovitsa... in 23m14s after 1003371311076 attempts (719798516 attempts/s)
 hostname: lukovitsa6jy7sldxvdw7wwzdmf5sezbwgr5uf57kkhi3jep25g2d2id.onion
 offset: sgowAsMLwBk=
 
-$ # Locally generate vanity key pair by offsetting the starting secret key
+$ # Locally generate vanity keypair by offsetting the starting secret key
 $ echo PT0gZWQyNTUxOXYxLXNlY3JldDogdHlwZTAgPT0AAABgZ5a7kuS0N1jaA12gtsqI87RPS1eqSj4KWpwXukWtV7pFj6gS200J96P8JDWTpvx000KF3r4l+xYcIJszhPZk | onion-vanity-address --offset=sgowAsMLwBk=
 ---
 hostname: lukovitsa6jy7sldxvdw7wwzdmf5sezbwgr5uf57kkhi3jep27gzjlid.onion

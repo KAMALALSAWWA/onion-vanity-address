@@ -6,7 +6,6 @@ import (
 	"encoding/base64"
 	"flag"
 	"fmt"
-	"io"
 	"math/big"
 	"os"
 	"os/signal"
@@ -16,32 +15,38 @@ import (
 	"sync/atomic"
 	"syscall"
 	"time"
+
+	"github.com/AlexanderYastrebov/vanity25519"
 )
 
 const usage = `Usage:
-    onion-vanity-address [--from PUBLIC_KEY] [--timeout TIMEOUT] PREFIX [PREFIX]...
-    onion-vanity-address --offset OFFSET
+    onion-vanity-address [--client] [--from PUBLIC_KEY] [--timeout TIMEOUT] PREFIX [PREFIX]...
+    onion-vanity-address [--client] --offset OFFSET
 
 Options:
-    --from PUBLIC_KEY       Start search from a base64-encoded hs_ed25519_public_key.
-    --offset OFFSET         Add an offset to a base64-encoded hs_ed25519_secret_key from standard input.
+    --client                Search for a Client Authorization keypair instead of an Onion Service keypair.
+    --from PUBLIC_KEY       Start search from the given public key.
+    --offset OFFSET         Add an offset to the secret keys read from standard input.
     --timeout TIMEOUT       Stop after the specified timeout (e.g., 10s, 5m, 1h).
 
-onion-vanity-address generates a new hidden service ed25519 key pair with an onion address having one of the specified PREFIXes,
+onion-vanity-address generates a new Onion Service ed25519 keypair with an onion address having one of the specified PREFIXes,
 and outputs it to standard output in base64-encoded YAML format.
 
-PREFIX must use base32 character set "` + onionBase32EncodingCharset + `".
+In --client mode, onion-vanity-address generates a Client Authorization keypair with public key having one of the specified PREFIXes.
+
+PREFIX must use base32 character set "` + onionBase32EncodingCharset + `" for Onion Servic keypair
+and "` + clientBase32EncodingCharset + `" for Client Authorization keypair.
 
 In --from mode, onion-vanity-address starts the search from a specified public key and
 outputs the offset to the public key with the desired prefix.
-The offset can be added to the corresponding secret key to derive the new key pair.
+The offset can be added to the corresponding secret key to derive the new keypair.
 
-In --offset mode, onion-vanity-address reads a base64-encoded hs_ed25519_secret_key from standard input,
-adds the specified offset to it, and outputs the resulting key pair.
+In --offset mode, onion-vanity-address reads the secret key from standard input,
+adds the specified offset to it, and outputs the resulting keypair.
 
-Examples:
+Service examples:
 
-    # Generate a new key pair with the specified prefix
+    # Generate a new service keypair with address having the specified prefix
     $ onion-vanity-address allium
     Found allium... in 12s after 558986486 attempts (48529996 attempts/s)
     ---
@@ -63,6 +68,28 @@ Examples:
     hostname: cebulasfa3b4ahol44ydvc2an6b4vgpjcguarwsj35dr6jbanxenrcqd.onion
     hs_ed25519_public_key: PT0gZWQyNTUxOXYxLXB1YmxpYzogdHlwZTAgPT0AAAARA0WCRQbDwB3L5zA6i0Bvg8qZ6RGoCNpJ30cfJCBtyA==
     hs_ed25519_secret_key: PT0gZWQyNTUxOXYxLXNlY3JldDogdHlwZTAgPT0AAABA/41ot1OvJr4PaETlAEG3GPAntvJ1agF2c7A2AXmBW/BnbLk2LgY3abEydc7heS5rhKByW/nafTlwifcgL0zO
+
+Client examples:
+
+    # Generate a new client authorization keypair with the specified prefix
+    $ onion-vanity-address --client LEMON
+    Found LEMON... in 0s after 14990923 attempts (63626192 attempts/s)
+    ---
+    public_key: LEMON7P5L7FEZZEJJGQTC3PDFRHEOOBP3H2XXHRFQSD72OKKEE5Q
+    private_key: AAADDFICRR46KLA52KV2QRIN6GUWIPEIVZZZUVZLC5UVE53QNMTA
+
+    # Find prefix offset from the specified public key
+    $ onion-vanity-address --client --from LEMON7P5L7FEZZEJJGQTC3PDFRHEOOBP3H2XXHRFQSD72OKKEE5Q TOMATO
+    Found TOMATO... in 16s after 1071246687 attempts (65052983 attempts/s)
+    ---
+    public_key: TOMATOWHTLC3ERVBD2D6V5DENSWPBAHYUKJNYNUALO3CJB2C2BZQ
+    offset: 0mtckGJcwbs=
+
+    # Apply offset to the private key
+    $ echo AAADDFICRR46KLA52KV2QRIN6GUWIPEIVZZZUVZLC5UVE53QNMTA | onion-vanity-address --client --offset 0mtckGJcwbs=
+    ---
+    public_key: TOMATOWHTLC3ERVBD2D6V5DENSWPBAHYUKJNYNUALO3CJB2C2BZQ
+    private_key: FDZEVAT7U4PFEJQ52KV2QRIN6GUWIPEIVZZZUVZLC5UVE53QNMTA
 `
 
 func must[T any](v T, err error) T {
@@ -73,59 +100,43 @@ func must[T any](v T, err error) T {
 	return v
 }
 
+func check(cond bool, msg string) {
+	if !cond {
+		fmt.Fprintf(os.Stderr, "Error: %s\n", msg)
+		flag.Usage()
+		os.Exit(1)
+	}
+}
+
 func main() {
+	var clientFlag bool
 	var fromFlag string
 	var offsetFlag string
 	var timeoutFlag time.Duration
 
 	flag.Usage = func() { fmt.Fprint(os.Stderr, usage) }
-	flag.StringVar(&fromFlag, "from", "", "base64-encoded hs_ed25519_public_key to start search from")
-	flag.StringVar(&offsetFlag, "offset", "", "base64-encoded offset to add to the secret key read from stdin")
+	flag.BoolVar(&clientFlag, "client", false, "search for a Client Authorization keypair instead of an Onion Service keypair")
+	flag.StringVar(&fromFlag, "from", "", "public key to start search from")
+	flag.StringVar(&offsetFlag, "offset", "", "offset to add to the secret key read from stdin")
 	flag.DurationVar(&timeoutFlag, "timeout", 0, "stop after specified timeout")
 	flag.Parse()
 
 	if offsetFlag != "" {
-		if fromFlag != "" {
-			fmt.Fprintln(os.Stderr, "Error: --offset and --from can not be used together")
-			flag.Usage()
-			os.Exit(1)
-		}
-		if flag.NArg() != 0 {
-			fmt.Fprintln(os.Stderr, "Error: --offset can not be used with PREFIX")
-			flag.Usage()
-			os.Exit(1)
-		}
-		startSecretKey := must(readStartSecretKey())
+		check(fromFlag == "", "--from can not be used with --offset")
+		check(timeoutFlag == 0, "--timeout can not be used with --offset")
+		check(flag.NArg() == 0, "PREFIX can not be used with --offset")
+
 		offset := new(big.Int).SetBytes(must(base64.StdEncoding.DecodeString(offsetFlag)))
 
-		vanitySecretKey := must(add(startSecretKey, offset))
-		vanityPublicKey := must(publicKeyFor(vanitySecretKey))
-
-		fmt.Println("---")
-		fmt.Printf("%s: %s\n", hostnameFileName, encodeOnionAddress(vanityPublicKey))
-		fmt.Printf("%s: %s\n", publicKeyFileName, base64.StdEncoding.EncodeToString(encodePublicKey(vanityPublicKey)))
-		fmt.Printf("%s: %s\n", secretKeyFileName, base64.StdEncoding.EncodeToString(encodeSecretKey(vanitySecretKey)))
+		if clientFlag {
+			offsetClientKey(offset)
+		} else {
+			offsetServiceKey(offset)
+		}
 		return
 	}
 
-	if flag.NArg() == 0 {
-		fmt.Fprintln(os.Stderr, "Error: PREFIX required")
-		flag.Usage()
-		os.Exit(1)
-	}
-
-	prefixes := flag.Args()
-
-	var startSecretKey, startPublicKey []byte
-	if fromFlag != "" {
-		spkb := must(base64.StdEncoding.DecodeString(fromFlag))
-		startPublicKey = must(decodePublicKey(spkb))
-	} else {
-		startSecretKey = make([]byte, 32)
-		rand.Read(startSecretKey)
-
-		startPublicKey = must(publicKeyFor(startSecretKey))
-	}
+	check(flag.NArg() > 0, "PREFIX required")
 
 	ctx, cancel := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer cancel()
@@ -135,8 +146,89 @@ func main() {
 		defer cancel()
 	}
 
+	if clientFlag {
+		searchClientKey(ctx, flag.Args(), fromFlag)
+	} else {
+		searchServiceKey(ctx, flag.Args(), fromFlag)
+	}
+}
+
+func offsetClientKey(offset *big.Int) {
+	startSecretKey := must(readClientSecretKey(os.Stdin))
+	vanitySecretKey := must(vanity25519.Add(startSecretKey, offset))
+	vanityPublicKey := must(clientPublicKeyFor(vanitySecretKey))
+
+	fmt.Println("---")
+	fmt.Printf("public_key: %s\n", clientBase32Encoding.EncodeToString(vanityPublicKey))
+	fmt.Printf("private_key: %s\n", clientBase32Encoding.EncodeToString(vanitySecretKey))
+}
+
+func offsetServiceKey(offset *big.Int) {
+	startSecretKey := must(readServiceSecretKey(os.Stdin))
+	vanitySecretKey := must(add(startSecretKey, offset))
+	vanityPublicKey := must(publicKeyFor(vanitySecretKey))
+
+	fmt.Println("---")
+	fmt.Printf("%s: %s\n", hostnameFileName, encodeOnionAddress(vanityPublicKey))
+	fmt.Printf("%s: %s\n", publicKeyFileName, encodeServicePublicKey(vanityPublicKey))
+	fmt.Printf("%s: %s\n", secretKeyFileName, encodeServiceSecretKey(vanitySecretKey))
+}
+
+func searchClientKey(ctx context.Context, prefixes []string, from string) {
+	var startSecretKey, startPublicKey []byte
+	if from != "" {
+		startPublicKey = must(decodeClientPublicKey(from))
+	} else {
+		startSecretKey = make([]byte, 32)
+		rand.Read(startSecretKey)
+
+		startPublicKey = must(clientPublicKeyFor(startSecretKey))
+	}
+
 	start := time.Now()
-	found, vanityPublicKey, attempts := searchParallel(ctx, startPublicKey, must(matchAnyOf(prefixes)))
+	found, vanityPublicKey, attempts := parallel(vanity25519.Search, ctx, startPublicKey, must(matchAnyOf(prefixes, clientMatch)))
+	elapsed := time.Since(start)
+
+	if found != nil {
+		var vanitySecretKey []byte
+		if len(startSecretKey) > 0 {
+			vanitySecretKey = must(vanity25519.Add(startSecretKey, found))
+			vanityPublicKey = must(clientPublicKeyFor(vanitySecretKey))
+		}
+
+		vanityPublicKeyEncoded := clientBase32Encoding.EncodeToString(vanityPublicKey)
+		prefix := longestMatching(prefixes, vanityPublicKeyEncoded)
+
+		fmt.Fprintf(os.Stderr, "Found %s... in %s after %d attempts (%.0f attempts/s)\n",
+			prefix, elapsed.Round(time.Second), attempts, float64(attempts)/elapsed.Seconds())
+
+		fmt.Println("---")
+		fmt.Printf("public_key: %s\n", vanityPublicKeyEncoded)
+		if len(vanitySecretKey) > 0 {
+			fmt.Printf("private_key: %s\n", clientBase32Encoding.EncodeToString(vanitySecretKey))
+		} else {
+			fmt.Printf("offset: %s\n", base64.StdEncoding.EncodeToString(found.Bytes()))
+		}
+	} else {
+		fmt.Fprintf(os.Stderr, "Stopped searching %v... after %s and %d attempts (%.0f attempts/s)\n",
+			prefixes, elapsed.Round(time.Second), attempts, float64(attempts)/elapsed.Seconds())
+		os.Exit(2)
+	}
+}
+
+func searchServiceKey(ctx context.Context, prefixes []string, from string) {
+	var startSecretKey, startPublicKey []byte
+	if from != "" {
+		startPublicKey = must(decodeServicePublicKey(from))
+	} else {
+		startSecretKey = make([]byte, 32)
+		rand.Read(startSecretKey)
+
+		startPublicKey = must(publicKeyFor(startSecretKey))
+	}
+
+	start := time.Now()
+	found, vanityPublicKey, attempts := parallel(search, ctx, startPublicKey, must(matchAnyOf(prefixes, addressMatch)))
 	elapsed := time.Since(start)
 
 	if found != nil {
@@ -155,8 +247,8 @@ func main() {
 		fmt.Println("---")
 		fmt.Printf("%s: %s\n", hostnameFileName, address)
 		if len(vanitySecretKey) > 0 {
-			fmt.Printf("%s: %s\n", publicKeyFileName, base64.StdEncoding.EncodeToString(encodePublicKey(vanityPublicKey)))
-			fmt.Printf("%s: %s\n", secretKeyFileName, base64.StdEncoding.EncodeToString(encodeSecretKey(vanitySecretKey)))
+			fmt.Printf("%s: %s\n", publicKeyFileName, encodeServicePublicKey(vanityPublicKey))
+			fmt.Printf("%s: %s\n", secretKeyFileName, encodeServiceSecretKey(vanitySecretKey))
 		} else {
 			fmt.Printf("offset: %s\n", base64.StdEncoding.EncodeToString(found.Bytes()))
 		}
@@ -167,64 +259,33 @@ func main() {
 	}
 }
 
-func longestMatching(prefixes []string, address string) string {
-	longest := ""
-	for _, p := range prefixes {
-		if strings.HasPrefix(address, p) && len(p) > len(longest) {
-			longest = p
-		}
+func clientMatch(prefix string) (func([]byte) bool, error) {
+	if len(prefix) == 0 {
+		return nil, fmt.Errorf("empty prefix")
 	}
-	if longest == "" {
-		panic("no matching prefix")
+
+	if strings.TrimLeft(prefix, clientBase32EncodingCharset) != "" {
+		return nil, fmt.Errorf("client public key prefix must use characters %q", clientBase32EncodingCharset)
 	}
-	return longest
+
+	return hasPrefix(prefix, clientBase32Encoding)
 }
 
-func matchAnyOf(prefixes []string) (func([]byte) bool, error) {
-	if len(prefixes) == 0 {
-		return nil, fmt.Errorf("at least one prefix required")
-	}
-
-	if len(prefixes) == 1 {
-		return match(prefixes[0])
-	}
-
-	tests := make([]func([]byte) bool, len(prefixes))
-	for i, p := range prefixes {
-		var err error
-		tests[i], err = match(p)
-		if err != nil {
-			return nil, err
-		}
-	}
-
-	return func(p []byte) bool {
-		for _, test := range tests {
-			if test(p) {
-				return true
-			}
-		}
-		return false
-	}, nil
-}
-
-func match(prefix string) (func([]byte) bool, error) {
+func addressMatch(prefix string) (func([]byte) bool, error) {
 	if len(prefix) == 0 {
 		return nil, fmt.Errorf("empty prefix")
 	}
 
 	if strings.TrimLeft(prefix, onionBase32EncodingCharset) != "" {
-		return nil, fmt.Errorf("prefix must use characters %q", onionBase32EncodingCharset)
+		return nil, fmt.Errorf("address prefix must use characters %q", onionBase32EncodingCharset)
 	}
 
-	prefixBytes, bits, err := decodePrefixBits(prefix)
-	if err != nil {
-		return nil, err
-	}
-	return hasPrefixBits(prefixBytes, bits), nil
+	return hasPrefix(prefix, onionBase32Encoding)
 }
 
-func searchParallel(ctx context.Context, startPublicKey []byte, test func([]byte) bool) (*big.Int, []byte, uint64) {
+type searchFunc func(ctx context.Context, startPublicKey []byte, startOffset *big.Int, batchSize int, accept func(candidatePublicKey []byte) bool, yield func(publicKey []byte, offset *big.Int)) uint64
+
+func parallel(search searchFunc, ctx context.Context, startPublicKey []byte, test func([]byte) bool) (*big.Int, []byte, uint64) {
 	var result atomic.Pointer[big.Int]
 	var vanityPublicKey []byte
 
@@ -248,17 +309,4 @@ func searchParallel(ctx context.Context, startPublicKey []byte, test func([]byte
 	wg.Wait()
 
 	return result.Load(), vanityPublicKey, attemptsTotal.Load()
-}
-
-func readStartSecretKey() ([]byte, error) {
-	limit := int64(base64.StdEncoding.EncodedLen(secretKeyFileLength))
-	encoded, err := io.ReadAll(io.LimitReader(os.Stdin, limit))
-	if err != nil {
-		return nil, err
-	}
-	decoded := make([]byte, secretKeyFileLength)
-	if _, err := base64.StdEncoding.Decode(decoded, encoded); err != nil {
-		return nil, err
-	}
-	return decodeSecretKey(decoded)
 }
